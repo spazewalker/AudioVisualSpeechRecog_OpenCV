@@ -5,7 +5,21 @@ import numpy as np
 # from fairseq.dataclass.configs import GenerationConfig
 
 class AVSpeechRecognition:
+    '''
+    Audio Video Speech Recognition based on AVHubert (arXiv:2201.02184 [eess.AS])
+    '''
     def __init__(self, source, detector_path='face_detection_yunet_2022mar.onnx', margin=5, video_width=640, video_height=480, score_threshold=0.9, nms_threshold=0.3, top_k=5000):
+        '''
+        params:
+            source: video source (e.g. '0', 'video.mp4')
+            detector_path: face detection model path (default:'face_detection_yunet_2022mar.onnx')
+            margin: margin for temporal window (default:5)
+            video_width: video width (default:640)
+            video_height: video height (default:480)
+            score_threshold: score threshold for face detection (default:0.9)
+            nms_threshold: nms threshold for face detection (default:0.3)
+            top_k: top k faces for face detection (default:5000)
+        '''
         self.cap = cv2.VideoCapture(source)
         self.margin = margin
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, video_width)
@@ -15,6 +29,16 @@ class AVSpeechRecognition:
         self.frames_queue = deque(maxlen=margin)
 
     def warp_image(self, frame, smoothed_landmarks):
+        '''
+        warps frame to make lips horizontal and fixed at center
+        params:
+            frame: input frame
+            smoothed_landmarks: smoothed landmarks
+        return:
+            warped_frame: warped frame
+            warped_landmarks: warped landmarks
+        '''
+        # TODO: fix warping
         rotateby = np.arctan((smoothed_landmarks[6][1]-smoothed_landmarks[5][1])/(smoothed_landmarks[6][0]-smoothed_landmarks[5][0]))*180/np.pi
         image_center = tuple((smoothed_landmarks[0]+smoothed_landmarks[1])/2)
         rot_mat = cv2.getRotationMatrix2D(image_center, rotateby, 1)
@@ -23,6 +47,17 @@ class AVSpeechRecognition:
         return trans_frame, trans_landmarks
 
     def cut_patch(self, img, landmarks, height, width, threshold=5):
+        '''
+        cuts mouth roi from image based on the mouth landmarks
+        params:
+            img: input image
+            landmarks: mouth landmarks
+            height: height of patch
+            width: width of patch
+            threshold: threshold for cutting (default:5)
+        return:
+            cutted_img: cutted image
+        '''
         center_x, center_y = np.mean(landmarks, axis=0)
         if center_y - height < 0:
             center_y = height
@@ -47,6 +82,14 @@ class AVSpeechRecognition:
         return cutted_img
 
     def preprocess(self, frame):
+        '''
+        preprocesses frame to get landmarks and mouth rois
+        params:
+            frame: input frame
+        return:
+            cropped: mouth roi
+            smoothed_landmarks: smoothed/averaged landmarks 
+        '''
         landmarks = self.detector.detect(frame)[-1]
         if landmarks is not None:
             landmarks = landmarks[:,:-1].reshape(landmarks.shape[0],7,2)
@@ -89,6 +132,9 @@ class AVSpeechRecognition:
     #     return hypo, ref
 
     def run(self):
+        '''
+        Read the video and process it.
+        '''
         while True:
             ret, frame = self.cap.read()
             if not ret:
@@ -106,6 +152,6 @@ class AVSpeechRecognition:
         return 0
 
 if __name__ == '__main__':
-    source = 0 # 0 for webcam device 0, path for video file
+    source = 0
     recognizer = AVSpeechRecognition(source)
     recognizer.run()
